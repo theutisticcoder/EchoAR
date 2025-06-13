@@ -5,7 +5,7 @@
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     </head>
 <body>
-    <a-scene webxr="requiredFeatures: hit-test;">
+    <a-scene enabled webxr="requiredFeatures: hit-test;">
         <a-camera position="0 1.6 0"></a-camera>
 
         <a-entity cursor="rayOrigin: cursor;" raycaster="objects: .collidable; direction: 0 0 -1; origin: 0 0 0; showLine: true; far: 10;"
@@ -16,7 +16,7 @@
                   id="reticle">
         </a-entity>
 
-        <a-text id="distanceText" value="" position="0 0.1 -0.5" align="center" color="white" scale="0.2 0.2 0.2"></a-text>
+        <a-text hidden id="distanceText" value="" position="0 0.1 -0.5" align="center" color="white" scale="0.2 0.2 0.2"></a-text>
 
         <script>
             const scene = document.querySelector('a-scene');
