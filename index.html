@@ -1,77 +1,86 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AR Ruler</title>
+    <title>EchoAR</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/aframe-webxr-hit-test@1.0.0/dist/aframe-webxr-hit-test.min.js"></script>
-</head>
+    </head>
 <body>
-    <a-scene webxr="requiredFeatures: hit-test;" ar-hit-test="doReticle: true;">
+    <a-scene webxr="requiredFeatures: hit-test;">
         <a-camera position="0 1.6 0"></a-camera>
 
-        <a-sphere id="point1" radius="0.05" color="blue" visible="false"></a-sphere>
-        <a-sphere id="point2" radius="0.05" color="red" visible="false"></a-sphere>
-        <a-entity id="measurementLine" line="start: 0 0 0; end: 0 0 0; color: green; opacity: 0.8;" visible="false"></a-entity>
-        <a-text id="distanceText" value="" position="0 0.2 0" align="center" color="white" scale="0.5 0.5 0.5" visible="false"></a-text>
+        <a-entity cursor="rayOrigin: cursor;" raycaster="objects: .collidable; direction: 0 0 -1; origin: 0 0 0; showLine: true; far: 10;"
+                  geometry="primitive: ring; radiusOuter: 0.01; radiusInner: 0.005;"
+                  material="color: white; shader: flat; opacity: 0.8;"
+                  position="0 0 -1.5" /* Adjust Z for comfortable view of reticle */
+                  visible="false" /* Start hidden, show when AR session starts */
+                  id="reticle">
+        </a-entity>
+
+        <a-text id="distanceText" value="" position="0 0.1 -0.5" align="center" color="white" scale="0.2 0.2 0.2"></a-text>
 
         <script>
-            let firstPointSet = false;
-            let point1Pos = new THREE.Vector3();
-            let point2Pos = new THREE.Vector3();
-
             const scene = document.querySelector('a-scene');
-            const point1El = document.getElementById('point1');
-            const point2El = document.getElementById('point2');
-            const measurementLineEl = document.getElementById('measurementLine');
-            const distanceTextEl = document.getElementById('distanceText');
+            const reticle = document.getElementById('reticle');
+            const distanceText = document.getElementById('distanceText');
+            let cameraEl; // Will store the camera entity once available
 
-            scene.addEventListener('ar-hit-test-select', function (event) {
-                if (event.detail.results.length > 0) {
-                    const hitResult = event.detail.results[0];
-                    const hitPose = new THREE.Matrix4().fromArray(hitResult.pose.transform.matrix);
-                    const hitPosition = new THREE.Vector3().setFromMatrixPosition(hitPose);
+            // Event listener for when the AR session starts
+            scene.addEventListener('enter-vr', function () {
+                if (scene.is('ar-mode')) {
+                    reticle.setAttribute('visible', true);
+                    cameraEl = document.querySelector('[camera]'); // Get the camera element
+                }
+            });
 
-                    if (!firstPointSet) {
-                        point1Pos.copy(hitPosition);
-                        point1El.setAttribute('position', hitPosition);
-                        point1El.setAttribute('visible', true);
-                        firstPointSet = true;
-                        distanceTextEl.setAttribute('value', 'Set second point...');
-                        distanceTextEl.setAttribute('visible', true);
+            // Event listener for when the AR session ends
+            scene.addEventListener('exit-vr', function () {
+                reticle.setAttribute('visible', false);
+                distanceText.setAttribute('value', '');
+            });
+
+            // Continuous update loop for AR
+            scene.addEventListener('render-loop-start', function () {
+                if (scene.is('ar-mode') && cameraEl) {
+                    const cameraPosition = new THREE.Vector3();
+                    const cameraDirection = new THREE.Vector3();
+
+                    // Get camera world position and direction
+                    cameraEl.object3D.getWorldPosition(cameraPosition);
+                    cameraEl.object3D.getWorldDirection(cameraDirection);
+
+                    // Create a raycaster from the camera
+                    const raycaster = new THREE.Raycaster(cameraPosition, cameraDirection);
+
+                    // We need to hit-test against the real world.
+                    // A-Frame's built-in WebXR handles the raycasting and intersections
+                    // for the 'cursor' component if it's set up correctly.
+
+                    // If you want to use the raw hit-test results for the center of the screen:
+                    // This is more advanced and requires direct WebXR API access or a custom component.
+                    // For A-Frame, the easiest way is to leverage the implicit hit-test of the cursor/reticle.
+                    
+                    // Access the last hit-test result of the cursor
+                    const cursorComponent = reticle.components.cursor;
+                    if (cursorComponent && cursorComponent.raycaster && cursorComponent.raycaster.intersections.length > 0) {
+                        const intersection = cursorComponent.raycaster.intersections[0];
+                        const hitPoint = intersection.point;
+
+                        // Calculate distance from camera to the hit point
+                        const distance = cameraPosition.distanceTo(hitPoint);
+                        distanceText.setAttribute('value', `${distance.toFixed(2)} meters`);
+                        setTimeout(documnet.querySelector("#noise").play(), distance.toFixed(2) * 100)
+
+                        // Position text relative to the camera for a floating display
+                        // This might need adjustment based on desired UX
+                        distanceText.object3D.position.set(0, 0.1, -0.5); // Example: slightly above and in front of the camera
+                        distanceText.object3D.lookAt(cameraPosition); // Make text always face the camera
                     } else {
-                        point2Pos.copy(hitPosition);
-                        point2El.setAttribute('position', hitPosition);
-                        point2El.setAttribute('visible', true);
-
-                        const distance = point1Pos.distanceTo(point2Pos);
-                        distanceTextEl.setAttribute('value', `${distance.toFixed(2)} meters`);
-
-                        // Position the text mid-way between the points, slightly above
-                        const midPoint = new THREE.Vector3().addVectors(point1Pos, point2Pos).multiplyScalar(0.5);
-                        midPoint.y += 0.2; // Lift the text slightly
-                        distanceTextEl.setAttribute('position', midPoint);
-                        
-                        // Update line
-                        measurementLineEl.setAttribute('line', `start: ${point1Pos.x} ${point1Pos.y} ${point1Pos.z}; end: ${point2Pos.x} ${point2Pos.y} ${point2Pos.z}; color: green; opacity: 0.8;`);
-                        measurementLineEl.setAttribute('visible', true);
-
-                        firstPointSet = false; // Reset for next measurement
+                        // No hit result (e.g., looking at sky, too far)
+                        distanceText.setAttribute('value', 'No surface detected');
                     }
                 }
             });
-
-            // Optional: Reset button for convenience
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'r' || event.key === 'R') {
-                    firstPointSet = false;
-                    point1El.setAttribute('visible', false);
-                    point2El.setAttribute('visible', false);
-                    measurementLineEl.setAttribute('visible', false);
-                    distanceTextEl.setAttribute('visible', false);
-                    distanceTextEl.setAttribute('value', '');
-                }
-            });
-
+            
         </script>
     </a-scene>
 </body>
